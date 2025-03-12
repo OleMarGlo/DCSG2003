@@ -1,0 +1,63 @@
+version: '3.3'
+
+configs:
+  haproxy_config:
+    file: ./haproxy.cfg
+  varnish_config:
+    file: ./default.vcl
+
+networks:
+  bf:
+    attachable: true
+
+services:
+  web:
+    image: 192.168.128.23:5000/bf:v23
+
+    networks:
+        - bf
+    volumes:
+        - type: bind
+          source: /bf_images
+          target: /var/www/html/images
+
+    environment:
+      BF_MEMCACHE_SERVER: memcache
+      BF_DB_HOST: db_balance
+      BF_DB_PORT: 26257
+      BF_DB_USER: bfuser
+      BF_DB_NAME: bf
+      BF_FRONTPAGE_LIMIT: 1500
+      BF_USE_LOCAL_IMAGES: 1
+
+    deploy:
+      replicas: 3
+
+  memcache:
+    image: memcached
+    command: ["memcached", "m", "1024"]
+    networks:
+      - bf
+
+  db_balance:
+    image: haproxy
+
+    configs:
+      - source: haproxy_config
+        target: /usr/local/etc/haproxy/haproxy.cfg
+
+    networks:
+      - bf
+
+    ports:
+      - "1936:1936"
+  varnish:
+    image: varnish
+    ports:
+      - "80:80"
+    command: ["-s","malloc,500M"]
+    configs:
+      - source: varnish_config
+        target: /etc/varnish/default.vcl
+    deploy:
+      replicas: 3
